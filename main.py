@@ -1,3 +1,8 @@
+
+   
+from bs4 import BeautifulSoup
+from weasyprint import HTML, CSS, default_url_fetcher
+from weasyprint.fonts import FontConfiguration
 from pdf2image import convert_from_path
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -13,6 +18,74 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 
 import random,os,sys
 
+
+#mode is img data css css
+def get_epub_data(path,filename):
+
+    f=open(path+"META-INF/"+"container.xml", "r")
+    data=f.read()
+    soup = BeautifulSoup(data, 'html.parser')
+    rootfile=soup.find_all("rootfile")
+    try:
+        rootfile = rootfile[0]
+        fullpath=rootfile.get("full-path")
+        if "/" in fullpath:
+            first,second = fullpath.split("/")[:2]      
+            
+            new_path= path+first+"/"
+            f=open(new_path+second,"r")
+            soup = BeautifulSoup(f.read(), 'lxml')
+            a=soup.find("manifest")
+            ncx_file=a.find(id="ncx").get("href")
+            f.close()
+            if(ncx_file is None):
+                print ("err 41")
+                return None
+                
+            f=open(os.path.join(new_path,ncx_file),"r")
+            return f.read()
+        else:
+            
+            f=open(os.path.join(path,fullpath),"r")
+            soup = BeautifulSoup(f.read(), 'lxml')
+            a=soup.find("manifest")
+            ncx_file=a.find(id="ncx").get("href")
+            f.close()
+            if(ncx_file is None):
+                print("NCX file not found 55")
+                
+            f.close()
+            f=open(os.path.join(path,ncx_file),"r")
+            return f.read()
+    except:
+        print ("err 61")
+        return None
+
+def get_epub(mode="img",path,filename):
+    f=open(path+filename,"r")
+    soup = BeautifulSoup(f.read(), 'lxml')
+    a=soup.find("manifest")
+    if mode == "img":
+        try:
+            img_jpg=a.find("item",{"media-type":"image/jpeg"}).get("href")
+            return path+img_jpg.split("/")[0]+"/"
+        except:
+            pass
+        try:
+            img_png=a.find("item",{"media-type":"image/png"}).get("href")
+            return global_root_dir+img_png.split("/")[0]+"/"
+        except:
+            return None
+
+
+    if mode == "css":
+        css_file=a.find("item",{"media-type":"text/css"}).get("href")
+        if css_file is None: 
+            return None
+        else: 
+            return [os.path.join(path,css_file)]
+        
+
 def main():
     args = len(sys.argv)
     total =None
@@ -27,7 +100,6 @@ def main():
             return 
         else:    
             path = sys.argv[1]
-            print(path)
             new_path = sys.argv[2]
             try:
               total = int(argv[3])
@@ -39,13 +111,28 @@ def main():
     
     counter = 0
     for fn in files:
-        if fn[-3:] == "pdf":
+    	pdf_file = None
+    	in_pdf_file = os.path.join(path,fn)
+    	if fn[-4:] == "mobi":
+			tempdir, filepath = mobi.extract(in_pdf_file)
+			image_base=filepath[:-9]
+			html=HTML(filename=filepath,base_url=image_base,encoding="utf8")
+			pdf_filename=unzip_file_path.split("/")[-1]
+    		pdf_file = fn.replace(".mobi",".pdf")
+            html.write_pdf(new_filename)
+    		shutil.rmtree(tempdir)
+    	elif fn[-4:] == "epub":
+             
+              html=HTML(string=get_epub_data(path,fn),base_url=get_epub("img",path,fn),encoding="utf8")
+              pdf_file = fn.replace(".epub",".pdf")
+              html.write_pdf(pdf_file stylesheets=get_epub("css",path,fn),font_config=FontConfiguration())
+              print "ok"
+        if False #fn[-3:] == "pdf" or pdf_file is not None:
           try:
              counter += 1
              if total is not None and  counter > total:
                return
              output = PdfFileWriter()
-             in_pdf_file = os.path.join(path,fn)
              print(in_pdf_file)
              pdf_file = PdfFileReader(open(in_pdf_file,"rb"))
              num_pages = pdf_file.getNumPages()
